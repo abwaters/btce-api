@@ -1,10 +1,12 @@
 package com.abwaters.btce;
 
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.UnsupportedEncodingException;
 import java.math.BigInteger;
+import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLConnection;
 import java.net.URLEncoder;
@@ -38,20 +40,20 @@ public class BTCE {
 	public BTCE() {
 	}
 
-	public BTCE(Properties p) {
+	public BTCE(Properties p) throws BTCEException {
 		this();
-		initializeProperties(p);
+		initializeProperties(p) ;
 	}
 
 	public Info getInfo() throws Exception {
-		return gson.fromJson(request("getInfo",null),Info.class) ;
+		return gson.fromJson(authrequest("getInfo",null),Info.class) ;
 	}
 	
-	public String getTransactionHistory() throws Exception {
+	public String getTransactionHistory() throws BTCEException {
 		return getTransactionHistory(0,0,0,0,null,0,0) ;
 	}
 	
-	public String getTransactionHistory(int from,int count,int from_id,int end_id,String order,long since,long end) throws Exception {
+	public String getTransactionHistory(int from,int count,int from_id,int end_id,String order,long since,long end) throws BTCEException {
 		Map<String,String> args = new HashMap<String,String>() ;		
 		if( from > 0 ) args.put("from", Integer.toString(from)) ;
 		if( count > 0 ) args.put("count", Integer.toString(count)) ;
@@ -60,14 +62,14 @@ public class BTCE {
 		if( order != null && order.length() > 0 ) args.put("order", order) ;
 		if( since > 0 ) args.put("since", Long.toString(since)) ;
 		if( end > 0 ) args.put("end", Long.toString(end)) ;
-		return request("TransHistory",args) ;
+		return authrequest("TransHistory",args) ;
 	}
 
-	public String getTradeHistory() throws Exception {
+	public String getTradeHistory() throws BTCEException {
 		return getTradeHistory(0,0,0,0,null,0,0,null) ;
 	}
 
-	public String getTradeHistory(int from,int count,int from_id,int end_id,String order,long since,long end,String pair) throws Exception {
+	public String getTradeHistory(int from,int count,int from_id,int end_id,String order,long since,long end,String pair) throws BTCEException {
 		Map<String,String> args = new HashMap<String,String>() ;		
 		if( from > 0 ) args.put("from", Integer.toString(from)) ;
 		if( count > 0 ) args.put("count", Integer.toString(count)) ;
@@ -77,14 +79,14 @@ public class BTCE {
 		if( since > 0 ) args.put("since", Long.toString(since)) ;
 		if( end > 0 ) args.put("end", Long.toString(end)) ;
 		if( pair != null && pair.length() > 0 ) args.put("pair", pair) ;
-		return request("TradeHistory",args) ;
+		return authrequest("TradeHistory",args) ;
 	}
 	
-	public String getOrderList() throws Exception {
+	public String getOrderList() throws BTCEException {
 		return getOrderList(0,0,0,0,null,0,0,null,0) ;
 	}
 	
-	public String getOrderList(int from,int count,int from_id,int end_id,String order,long since,long end,String pair,int active) throws Exception {
+	public String getOrderList(int from,int count,int from_id,int end_id,String order,long since,long end,String pair,int active) throws BTCEException {
 		Map<String,String> args = new HashMap<String,String>() ;		
 		if( from > 0 ) args.put("from", Integer.toString(from)) ;
 		if( count > 0 ) args.put("count", Integer.toString(count)) ;
@@ -95,25 +97,25 @@ public class BTCE {
 		if( end > 0 ) args.put("end", Long.toString(end)) ;
 		if( pair != null && pair.length() > 0 ) args.put("pair", pair) ;
 		if( active > 0 ) args.put("active", Long.toString(active)) ;
-		return request("OrderList",args) ;
+		return authrequest("OrderList",args) ;
 	}
 	
-	public String executeTrade(String pair,String type,double rate,double amount) throws Exception {
+	public String executeTrade(String pair,String type,double rate,double amount) throws BTCEException {
 		Map<String,String> args = new HashMap<String,String>() ;		
 		args.put("pair", pair) ;
 		args.put("type", type) ;
 		args.put("rate", Double.toString(rate)) ;
 		args.put("amount", Double.toString(amount)) ;
-		return request("Trade",args) ;
+		return authrequest("Trade",args) ;
 	}
 	
-	public String cancelTrade(int order_id) throws Exception {
+	public String cancelTrade(int order_id) throws BTCEException {
 		Map<String,String> args = new HashMap<String,String>() ;		
 		args.put("order_id", Integer.toString(order_id)) ;
-		return request("CancelTrade",args) ;
+		return authrequest("CancelTrade",args) ;
 	}
 	
-	public void initializeProperties(Properties p) {
+	public void initializeProperties(Properties p) throws BTCEException {
 		gson = new Gson() ;
 		key = p.getProperty("btce.key") ;
 		secret = p.getProperty("btce.secret") ;
@@ -123,33 +125,33 @@ public class BTCE {
 		try {
 			keyspec = new SecretKeySpec(secret.getBytes("UTF-8"), "HmacSHA512") ;
 		} catch (UnsupportedEncodingException uee) {
-			System.err.println("Unsupported encoding exception: "+ uee.toString()) ;
+			throw new BTCEException("HMAC-SHA512 doesn't seem to be installed",uee) ;
 		}
 
 		try {
 			mac = Mac.getInstance("HmacSHA512") ;
 		} catch (NoSuchAlgorithmException nsae) {
-			System.err.println("No such algorithm exception: "
-					+ nsae.toString());
+			throw new BTCEException("HMAC-SHA512 doesn't seem to be installed",nsae) ;
 		}
 
 		try {
 			mac.init(keyspec) ;
 		} catch (InvalidKeyException ike) {
-			System.err.println("Invalid key exception: " + ike.toString());
+			throw new BTCEException("Invalid key for signing request",ike) ;
 		}
 		
 		initialized = true ;
 	}
 	
-	private final String request(String method, Map<String,String> args) throws Exception {
-		if( !initialized ) return null ;
-		
-		if (args == null) args = new HashMap<String,String>() ;
+	private final String authrequest(String method, Map<String,String> args) throws BTCEException {
+		if( !initialized ) throw new BTCEException("BTCE not initialized.") ;
 
+		// add method and nonce to args
+		if (args == null) args = new HashMap<String,String>() ;
 		args.put("method", method) ;
 		args.put("nonce",""+ ++nonce) ;
 		
+		// create url form encoded post data
 		String postData = "" ;
 		for (Iterator<String> iter = args.keySet().iterator(); iter.hasNext();) {
 			String arg = iter.next() ;
@@ -157,26 +159,34 @@ public class BTCE {
 			postData += arg + "=" + URLEncoder.encode(args.get(arg)) ;
 		}
 		
-		URL url = new URL(API_URL);
-		URLConnection conn = url.openConnection() ;
-		conn.setUseCaches(false) ;
-		conn.setDoOutput(true) ;
-		conn.setRequestProperty("Key",key) ;
-		conn.setRequestProperty("Sign",toHex(mac.doFinal(postData.getBytes("UTF-8")))) ;
-		conn.setRequestProperty("Content-Type","application/x-www-form-urlencoded") ;
-		
-		// write post data
-		OutputStreamWriter out = new OutputStreamWriter(conn.getOutputStream());
-		out.write(postData) ;
-		out.close() ;
-
-		// read response
-		BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+		// create connection
+		URLConnection conn = null ;
 		StringBuffer response = new StringBuffer() ;
-		String line = null ;
-		while ((line = in.readLine()) != null)
-			response.append(line) ;
-		in.close() ;
+		try {
+			URL url = new URL(API_URL);
+			conn = url.openConnection() ;
+			conn.setUseCaches(false) ;
+			conn.setDoOutput(true) ;
+			conn.setRequestProperty("Key",key) ;
+			conn.setRequestProperty("Sign",toHex(mac.doFinal(postData.getBytes("UTF-8")))) ;
+			conn.setRequestProperty("Content-Type","application/x-www-form-urlencoded") ;
+		
+			// write post data
+			OutputStreamWriter out = new OutputStreamWriter(conn.getOutputStream());
+			out.write(postData) ;
+			out.close() ;
+	
+			// read response
+			BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+			String line = null ;
+			while ((line = in.readLine()) != null)
+				response.append(line) ;
+			in.close() ;
+		} catch (MalformedURLException e) {
+			throw new BTCEException("Internal error.",e) ;
+		} catch (IOException e) {
+			throw new BTCEException("Error connecting to BTC-E.",e) ;
+		}
 		return response.toString() ;
 	}
 	
@@ -258,5 +268,18 @@ public class BTCE {
 
 		@SerializedName("return")
 		public TransactionHistoryReturn info ;
+	}
+	
+	public class BTCEException extends Exception {
+		
+		private static final long serialVersionUID = 1L;
+		
+		public BTCEException(String msg) {
+			super(msg) ;
+		}
+		
+		public BTCEException(String msg, Throwable e) {
+			super(msg,e) ;
+		}
 	}
 }
