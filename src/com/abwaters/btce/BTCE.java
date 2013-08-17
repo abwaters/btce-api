@@ -65,8 +65,7 @@ public class BTCE {
 	// https://btc-e.com/api/2/btc_usd/trades
 
 	private static final String USER_AGENT = "Mozilla/5.0 (compatible; BTCE-API/1.0; MSIE 6.0 compatible; +https://github.com/abwaters/btce-api)" ;
-	private static final String TRADES_URL = "https://btc-e.com/api/2/" ;
-	private static final String TICKER_URL = "https://btc-e.com/api/2/" ;
+	private static final String TICKER_TRADES_URL = "https://btc-e.com/api/2/" ;
 	private static final String API_URL = "https://btc-e.com/tapi" ;
 	
 	private static long auth_last_request = 0 ;
@@ -294,6 +293,35 @@ public class BTCE {
 			throw new BTCEException("Invalid key for signing request",ike) ;
 		}
 		initialized = true ;
+	}
+	
+	/**
+	 * Get the current ticker for the specified currency pair.
+	 * <p>
+	 * Since this call doesn't use authorization, the request
+	 * limit is typically set higher (10-15 seconds) to avoid abuse. 
+	 * 
+	 * @param pair
+	 * @return
+	 * @throws BTCEException
+	 */
+	public Ticker getTicker(String pair) throws BTCEException {
+		TickerWrapper tw = gson.fromJson(request(TICKER_TRADES_URL+pair+"/ticker"),TickerWrapper.class) ; 
+		return tw.ticker ;
+	}
+	
+	/**
+	 * Get the current rade book for the specified currency pair.
+	 * <p>
+	 * Since this call doesn't use authorization, the request
+	 * limit is typically set higher (10-15 seconds) to avoid abuse. 
+	 * 
+	 * @param pair
+	 * @return
+	 * @throws BTCEException
+	 */
+	public TradesDetail[] getTrades(String pair) throws BTCEException {
+		return gson.fromJson(request(TICKER_TRADES_URL+pair+"/trades"),TradesDetail[].class) ;
 	}
 
 	private final void preCall() {
@@ -553,7 +581,7 @@ public class BTCE {
 	 * 
 	 */
 	public class TransactionHistoryOrder {
-		public int trans_id ;
+		public long trans_id ;
 		public TransactionHistoryOrderDetails trans_details ;
 		
 		/*
@@ -572,8 +600,10 @@ public class BTCE {
 	public class TransactionHistoryOrderDetails {
 		public int type ;
 		public double amount ;
-		public String currency, desc ;
-		public int status, timestamp ;
+		public String currency ;
+		public String desc ;
+		public int status ;
+		public long timestamp ;
 		
 		/*
 		 * (non-Javadoc)
@@ -600,7 +630,7 @@ public class BTCE {
 				  while(iter.hasNext()) {
 					  Entry<String,JsonElement> jsonOrder = iter.next();
 					  TransactionHistoryOrder transaction = new TransactionHistoryOrder() ;
-					  transaction.trans_id = Integer.parseInt(jsonOrder.getKey()) ;
+					  transaction.trans_id = Long.parseLong(jsonOrder.getKey()) ;
 					  transaction.trans_details = context.deserialize(jsonOrder.getValue(),TransactionHistoryOrderDetails.class) ;
 					  transactions.add(transaction) ;
 				  }
@@ -648,7 +678,7 @@ public class BTCE {
 	 * 
 	 */
 	public class TradeHistoryOrder {
-		public int trans_id ;
+		public long trans_id ;
 		public TradeHistoryOrderDetails trade_details ;
 		
 		/*
@@ -667,9 +697,9 @@ public class BTCE {
 	public class TradeHistoryOrderDetails {
 		public String pair, type ;
 		public double amount, rate ;
-		public int order_id ;
+		public long order_id ;
 		public int is_your_order ;
-		public int timestamp ;
+		public long timestamp ;
 		
 		/*
 		 * (non-Javadoc)
@@ -694,7 +724,7 @@ public class BTCE {
 				  while(iter.hasNext()) {
 					  Entry<String,JsonElement> jsonOrder = iter.next();
 					  TradeHistoryOrder trade = new TradeHistoryOrder() ;
-					  trade.trans_id = Integer.parseInt(jsonOrder.getKey()) ;
+					  trade.trans_id = Long.parseLong(jsonOrder.getKey()) ;
 					  trade.trade_details = context.deserialize(jsonOrder.getValue(),TradeHistoryOrderDetails.class) ;
 					  trades.add(trade) ;
 				  }
@@ -741,7 +771,7 @@ public class BTCE {
 	 * 
 	 */
 	public class OrderListOrder {
-		public int order_id ;
+		public long order_id ;
 		public OrderListOrderDetails order_details ;
 		
 		/*
@@ -763,7 +793,7 @@ public class BTCE {
 		public double amount ;
 		public double rate ;
 		public int status ;
-		public int timestamp ;
+		public long timestamp ;
 		
 		/*
 		 * (non-Javadoc)
@@ -787,7 +817,7 @@ public class BTCE {
 				  while(iter.hasNext()) {
 					  Entry<String,JsonElement> jsonOrder = iter.next();
 					  OrderListOrder order = new OrderListOrder() ;
-					  order.order_id = Integer.parseInt(jsonOrder.getKey()) ;
+					  order.order_id = Long.parseLong(jsonOrder.getKey()) ;
 					  order.order_details = context.deserialize(jsonOrder.getValue(),OrderListOrderDetails.class) ;
 					  orders.add(order) ;
 				  }
@@ -820,7 +850,7 @@ public class BTCE {
 	public class TradeReturn {
 		public double received ;
 		public double remains ;
-		public int order_id ;
+		public long order_id ;
 		public Funds funds ;
 		
 		/*
@@ -855,7 +885,7 @@ public class BTCE {
 	 * 
 	 */
 	public class CancelOrderReturn {
-		public int order_id ;
+		public long order_id ;
 		public Funds funds ;
 		
 		/*
@@ -895,21 +925,76 @@ public class BTCE {
 	 * Trade type helper class.
 	 *
 	 */
-	public static final class TradeType {
+	public static class TradeType {
 		public static final String BUY = "buy" ;
 		public static final String SELL = "sell" ;
 	}
 	
-	public static final class TransactionType {
+	public static class TransactionType {
 		public static final int DEPOSIT = 0 ;
 		public static final int WITHDRAW = 1 ;	// ?
 		public static final int ORDER_CANCEL = 4 ;
 		public static final int ORDER_SELL = 5 ;
 	}
 	
-	public static final class OrderStatus {
+	public static class OrderStatus {
 		public static final int ACTIVE = 0 ;
-		//public static final int 
+		public static final int FILLED = 1 ;
+		public static final int CANCELED = 2 ;
+		public static final int PARTIALLY_FILLED = 3 ;
+	}
+
+	private class TickerWrapper {
+		private Ticker ticker ;
+	}
+	
+	/**
+	 * 
+	 */
+	public static class Ticker {
+		public double high ;
+		public double low ;
+		public double avg ;
+		public double vol ;
+		public double vol_cur ;
+		public double last ;
+		public double buy ;
+		public double sell ;
+		public long updated ;
+		public long server_time ;
+		
+		/*
+		 * (non-Javadoc)
+		 * @see java.lang.Object#toString()
+		 */
+		@Override
+		public String toString() {
+			return "Ticker [high=" + high + ", low=" + low + ", avg=" + avg
+					+ ", vol=" + vol + ", vol_cur=" + vol_cur + ", last="
+					+ last + ", buy=" + buy + ", sell=" + sell + ", updated="
+					+ updated + ", server_time=" + server_time + "]";
+		}
+	}
+
+	/**
+	 * 
+	 */
+	public static class TradesDetail {
+		public long date ;
+		public double price ;
+		public double amount ;
+		public long tid ;
+		public String price_currency ;
+		public String item ;
+		public String trade_type ;
+
+		@Override
+		public String toString() {
+			return "TradesDetail [date=" + date + ", price=" + price
+					+ ", amount=" + amount + ", tid=" + tid
+					+ ", price_currency=" + price_currency + ", item=" + item
+					+ ", trade_type=" + trade_type + "]";
+		}
 	}
 	
 	/**

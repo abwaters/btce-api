@@ -2,6 +2,7 @@ package com.abwaters.btce.test;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.util.Arrays;
 import java.util.Properties;
 
 import junit.framework.Assert;
@@ -14,8 +15,10 @@ import com.abwaters.btce.BTCE.BTCEException;
 import com.abwaters.btce.BTCE.CancelOrder;
 import com.abwaters.btce.BTCE.Info;
 import com.abwaters.btce.BTCE.OrderList;
+import com.abwaters.btce.BTCE.Ticker;
 import com.abwaters.btce.BTCE.Trade;
 import com.abwaters.btce.BTCE.TradeHistory;
+import com.abwaters.btce.BTCE.TradesDetail;
 import com.abwaters.btce.BTCE.TransactionHistory;
 
 public class BTCE_Test {
@@ -86,5 +89,17 @@ public class BTCE_Test {
 		OrderList order_list = btce.getOrderList() ;
 		Assert.assertTrue(order_list!=null) ;
 		System.out.println(order_list.toString()) ;
+	}
+	
+	@Test
+	public void testTicker() throws BTCEException {
+		Ticker t = btce.getTicker(BTCE.Pairs.BTC_USD) ;
+		System.out.println(t) ;
+	}
+	
+	@Test
+	public void testTrades() throws BTCEException {
+		TradesDetail[] trades = btce.getTrades(BTCE.Pairs.BTC_USD) ;
+		System.out.println(Arrays.toString(trades)) ;
 	}
 }
