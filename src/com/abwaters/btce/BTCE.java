@@ -1,6 +1,12 @@
 /*
  * This is the package for the BTCE API.  By design, this will contain a single class with the goal of simplifying dependencies and making integration easy.
- * Currently the only dependency is the Google Gson library for JSON serialization {@link http://google-gson.googlecode.com/}.
+ * Currently the only dependency is the Google Gson library for JSON serialization <a href="http://google-gson.googlecode.com/">http://google-gson.googlecode.com/</a>.
+ * <p>
+ * All methods and data structures are intended to match the return results from the API as closely as possible with the intent that the calls can be made almost
+ * exactly as documented by the BTC-E API documentation <a href="https://btc-e.com/api/documentation">https://btc-e.com/api/documentation</a>.
+ * <p>
+ * Also note that this class does not use the Spring Framework, Jave EE, or any other architectural framework with the sole goal of being as flexible as possible.
+ * <p>
  * 
  * @author Bryan Waters <bryanw@abwaters.com>
  *
@@ -57,12 +63,16 @@ public class BTCE {
 	
 	// https://btc-e.com/api/2/btc_usd/ticker
 	// https://btc-e.com/api/2/btc_usd/trades
-	
+
+	private static final String USER_AGENT = "Mozilla/5.0 (compatible; BTCE-API/1.0; MSIE 6.0 compatible; +https://github.com/abwaters/btce-api)" ;
+	private static final String TRADES_URL = "https://btc-e.com/api/2/" ;
 	private static final String TICKER_URL = "https://btc-e.com/api/2/" ;
 	private static final String API_URL = "https://btc-e.com/tapi" ;
 	
+	private static long auth_last_request = 0 ;
+	private static long auth_request_limit = 1000 ;	// request limit in milliseconds
 	private static long last_request = 0 ;
-	private static long request_limit = 1000 ;	// request limit in milliseconds
+	private static long request_limit = 15000 ;	// request limit in milliseconds for non-auth calls...defaults to 15 seconds
 	private static long nonce = 0, last_nonce = 0 ;
 	
 	private boolean initialized = false;
@@ -209,7 +219,7 @@ public class BTCE {
 	 * @param amount the quantity of <curr1> to buy.
 	 * @return the trade results.
 	 */
-	public Trade executeTrade(String pair,String type,double rate,double amount) throws BTCEException {
+	public Trade trade(String pair,String type,double rate,double amount) throws BTCEException {
 		Map<String,String> args = new HashMap<String,String>() ;		
 		args.put("pair", pair) ;
 		args.put("type", type) ;
@@ -226,7 +236,34 @@ public class BTCE {
 	public CancelOrder cancelOrder(int order_id) throws BTCEException {
 		Map<String,String> args = new HashMap<String,String>() ;		
 		args.put("order_id", Integer.toString(order_id)) ;
-		return gson.fromJson(authrequest("CancelTrade",args),CancelOrder.class) ;
+		return gson.fromJson(authrequest("CancelOrder",args),CancelOrder.class) ;
+	}
+	
+	/**
+	 * Limits how frequently calls to the open API for trade history and tickers can be made.  
+	 * If calls are attempted more frequently, the thread making the call is put to sleep for 
+	 * the duration of the time left before the limit is reached.
+	 * <p>
+	 * This is set to 15 second based on a forum post indicating that support specified this limit.
+	 * <a href="https://bitcointalk.org/index.php?topic=127553.msg1764391#msg1764391">Forum post can be read here</a>. 
+	 *  
+	 * @param request_limit call limit in milliseconds
+	 */
+	public void setCallLimit(long request_limit) {
+		BTCE.request_limit = request_limit ; 
+	}
+	
+	/**
+	 * Limits how frequently calls to the authenticated BTCE can be made.  If calls are attempted 
+	 * more frequently, the thread making the call is put to sleep for the duration of the time 
+	 * left before the limit is reached.
+	 * <p>
+	 * This is set to 1 second on the assumption that authenticated (calls using keys) are made infrequently and should receive priority.
+	 * 
+	 * @param auth_request_limit call limit in milliseconds
+	 */
+	public void setAuthCallLimit(long auth_request_limit) {
+		BTCE.auth_request_limit = auth_request_limit ; 
 	}
 	
 	/**
@@ -259,7 +296,7 @@ public class BTCE {
 		initialized = true ;
 	}
 
-	private final void prepCall() {
+	private final void preCall() {
 		while(nonce==last_nonce) nonce++ ;
 		long elapsed = System.currentTimeMillis()-last_request ;
 		if( elapsed < request_limit ) {
@@ -272,11 +309,52 @@ public class BTCE {
 		last_request = System.currentTimeMillis() ;
 	}
 	
+	private final String request(String urlstr) throws BTCEException {
+		
+		// handle precall logic
+		preCall() ;
+
+		// create connection
+		URLConnection conn = null ;
+		StringBuffer response = new StringBuffer() ;
+		try {
+			URL url = new URL(urlstr);
+			conn = url.openConnection() ;
+			conn.setUseCaches(false) ;
+			conn.setRequestProperty("User-Agent",USER_AGENT) ;
+		
+			// read response
+			BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+			String line = null ;
+			while ((line = in.readLine()) != null)
+				response.append(line) ;
+			in.close() ;
+		} catch (MalformedURLException e) {
+			throw new BTCEException("Internal error.",e) ;
+		} catch (IOException e) {
+			throw new BTCEException("Error connecting to BTC-E.",e) ;
+		}
+		return response.toString() ;
+	}
+	
+	private final void preAuth() {
+		while(nonce==last_nonce) nonce++ ;
+		long elapsed = System.currentTimeMillis()-auth_last_request ;
+		if( elapsed < auth_request_limit ) {
+			try {
+				Thread.currentThread().sleep(auth_request_limit-elapsed) ;
+			} catch (InterruptedException e) {
+				
+			}
+		}
+		auth_last_request = System.currentTimeMillis() ;
+	}
+	
 	private final String authrequest(String method, Map<String,String> args) throws BTCEException {
 		if( !initialized ) throw new BTCEException("BTCE not initialized.") ;
 		
 		// prep the call
-		prepCall() ;
+		preAuth() ;
 
 		// add method and nonce to args
 		if (args == null) args = new HashMap<String,String>() ;
@@ -303,6 +381,7 @@ public class BTCE {
 			conn.setRequestProperty("Key",key) ;
 			conn.setRequestProperty("Sign",toHex(mac.doFinal(postData.getBytes("UTF-8")))) ;
 			conn.setRequestProperty("Content-Type","application/x-www-form-urlencoded") ;
+			conn.setRequestProperty("User-Agent",USER_AGENT) ;
 		
 			// write post data
 			OutputStreamWriter out = new OutputStreamWriter(conn.getOutputStream());
@@ -331,8 +410,22 @@ public class BTCE {
 	 * Displays the amounts of various currencies associated with an account or an order.
 	 */
 	public class Funds {
-		public double usd, btc, ltc, nmc, rur, eur, nvc, trc, ppc, ftc, cnc ;
+		public double usd ;
+		public double btc ;
+		public double ltc ;
+		public double nmc ;
+		public double rur ;
+		public double eur ;
+		public double nvc ;
+		public double trc ;
+		public double ppc ;
+		public double ftc ;
+		public double cnc ;
 
+		/*
+		 * (non-Javadoc)
+		 * @see java.lang.Object#toString()
+		 */
 		@Override
 		public String toString() {
 			return "[usd=" + usd + ", btc=" + btc + ", ltc=" + ltc + ", nmc="
@@ -343,20 +436,49 @@ public class BTCE {
 	}
 	
 	/**
-	 * Info class.
+	 * returned by the {@link #getInfo() getInfo} method. Note that due to a java name collision the JSON field return is named info.
 	 */
-	public class Info extends Results {
+	public static class Info extends Results {
+		@SerializedName("return")
+		public InfoReturn info ;
+
+		/*
+		 * (non-Javadoc)
+		 * @see java.lang.Object#toString()
+		 */
 		@Override
 		public String toString() {
 			return "Info [success=" + success + ", error=" + error + ", return=" + info + "]";
 		}
 
-		@SerializedName("return")
-		public InfoReturn info ;
 	}	
 
 	/**
-	 * InfoReturn class.
+	 * base class for all data structures returned by the API.
+	 */
+	public static class Results {
+		/**
+		 * can be either 0 or 1 depending on whether API was successful.
+		 */
+		public int success ;
+		
+		/**
+		 * if success is 0 then this will contain the details of the error.
+		 */
+		public String error = "" ;
+		
+		/*
+		 * (non-Javadoc)
+		 * @see java.lang.Object#toString()
+		 */
+		@Override
+		public String toString() {
+			return "[success=" + success + ", error=" + error + "]";
+		}
+	}
+
+	/**
+	 * 
 	 */
 	public class InfoReturn {
 		public Funds funds ;
@@ -364,6 +486,11 @@ public class BTCE {
 		public int transaction_count ;
 		public int open_orders ;
 		public long server_time ;
+
+		/*
+		 * (non-Javadoc)
+		 * @see java.lang.Object#toString()
+		 */
 		@Override
 		public String toString() {
 			return "[funds=" + funds + ", rights=" + rights
@@ -373,24 +500,15 @@ public class BTCE {
 	}
 
 	/**
-	 * Results class.
-	 */
-	public class Results {
-		public int success ;
-		public String error = "" ;
-		
-		@Override
-		public String toString() {
-			return "[success=" + success + ", error=" + error + "]";
-		}
-	}
-
-	/**
-	 * Rights class.
+	 * 
 	 */
 	public class Rights {
 		public int info, trade, withdraw ;
 
+		/*
+		 * (non-Javadoc)
+		 * @see java.lang.Object#toString()
+		 */
 		@Override
 		public String toString() {
 			return "[info=" + info + ", trade=" + trade + ", withdraw="
@@ -399,12 +517,16 @@ public class BTCE {
 	}
 
 	/**
-	 * TransactionHistory class.
+	 * returned by the {@link #getTransactionHistory() getTransactionHistory} method. Note that due to a java name collision the JSON field return is named info.
 	 */
-	public class TransactionHistory extends Results {
+	public static class TransactionHistory extends Results {
 		@SerializedName("return")
 		public TransactionHistoryReturn info ;
 		
+		/*
+		 * (non-Javadoc)
+		 * @see java.lang.Object#toString()
+		 */
 		@Override
 		public String toString() {
 			return "TransactionHistory [success=" + success + ", error=" + error + ", return=" + info + "]";
@@ -412,32 +534,40 @@ public class BTCE {
 	}
 
 	/**
-	 * TransactionHistoryReturn class.
+	 * 
 	 */
 	public class TransactionHistoryReturn {
-		public TransactionHistoryOrder[] orders ;
+		public TransactionHistoryOrder[] transactions ;
 
+		/*
+		 * (non-Javadoc)
+		 * @see java.lang.Object#toString()
+		 */
 		@Override
 		public String toString() {
-			return "[orders="+ Arrays.toString(orders) + "]";
+			return "[transactions="+ Arrays.toString(transactions) + "]";
 		}
 	}
 	
 	/**
-	 * TransactionHistoryOrder class.
+	 * 
 	 */
 	public class TransactionHistoryOrder {
-		public int order_id ;
-		public TransactionHistoryOrderDetails order_details ;
+		public int trans_id ;
+		public TransactionHistoryOrderDetails trans_details ;
 		
+		/*
+		 * (non-Javadoc)
+		 * @see java.lang.Object#toString()
+		 */
 		@Override
 		public String toString() {
-			return "[order_id=" + order_id + ", order_details="+ order_details + "]";
+			return "[trans_id=" + trans_id + ", trans_details="+ trans_details + "]";
 		}
 	}
 	
 	/**
-	 * @param args
+	 * 
 	 */
 	public class TransactionHistoryOrderDetails {
 		public int type ;
@@ -445,6 +575,10 @@ public class BTCE {
 		public String currency, desc ;
 		public int status, timestamp ;
 		
+		/*
+		 * (non-Javadoc)
+		 * @see java.lang.Object#toString()
+		 */
 		@Override
 		public String toString() {
 			return "[type=" + type + ", amount="
@@ -454,68 +588,81 @@ public class BTCE {
 	}
 
 	/**
-	 * @param args
+	 * 
 	 */
 	private class TransactionHistoryReturnDeserializer implements JsonDeserializer<TransactionHistoryReturn> {
 		  public TransactionHistoryReturn deserialize(JsonElement json, Type typeOfT, JsonDeserializationContext context) throws JsonParseException {
 			  TransactionHistoryReturn thr = new TransactionHistoryReturn() ;
-			  List<TransactionHistoryOrder> orders = new ArrayList<TransactionHistoryOrder>() ;
+			  List<TransactionHistoryOrder> transactions = new ArrayList<TransactionHistoryOrder>() ;
 			  if( json.isJsonObject() ) {
 				  JsonObject o = json.getAsJsonObject() ;
 				  Iterator<Entry<String,JsonElement>> iter = o.entrySet().iterator() ;
 				  while(iter.hasNext()) {
 					  Entry<String,JsonElement> jsonOrder = iter.next();
-					  TransactionHistoryOrder order = new TransactionHistoryOrder() ;
-					  order.order_id = Integer.parseInt(jsonOrder.getKey()) ;
-					  order.order_details = context.deserialize(jsonOrder.getValue(),TransactionHistoryOrderDetails.class) ;
-					  orders.add(order) ;
+					  TransactionHistoryOrder transaction = new TransactionHistoryOrder() ;
+					  transaction.trans_id = Integer.parseInt(jsonOrder.getKey()) ;
+					  transaction.trans_details = context.deserialize(jsonOrder.getValue(),TransactionHistoryOrderDetails.class) ;
+					  transactions.add(transaction) ;
 				  }
 			  }
-			  thr.orders = orders.toArray(new TransactionHistoryOrder[0]) ;
+			  thr.transactions = transactions.toArray(new TransactionHistoryOrder[0]) ;
 			  return thr ;
 		  }
 	}
 	
 	/**
-	 * @param args
+	 * returned by the {@link #getTradeHistory() getTradeHistory} method. Note that due to a java name collision the JSON field return is named info.
 	 */
-	public class TradeHistory extends Results {
+	public static class TradeHistory extends Results {
+		@SerializedName("return")
+		public TradeHistoryReturn info ;
+		
+		/*
+		 * (non-Javadoc)
+		 * @see java.lang.Object#toString()
+		 */
 		@Override
 		public String toString() {
 			return "TradeHistory [success=" + success + ", error=" + error + ", return=" + info + "]";
 		}
 
-		@SerializedName("return")
-		public TradeHistoryReturn info ;
 	}
 
 	/**
-	 * @param args
+	 * 
 	 */
 	public class TradeHistoryReturn {
-		public TradeHistoryOrder[] orders ;
+		public TradeHistoryOrder[] trades ;
 
+		/*
+		 * (non-Javadoc)
+		 * @see java.lang.Object#toString()
+		 */
 		@Override
 		public String toString() {
-			return "[orders="+ Arrays.toString(orders) + "]";
+			return "[trades="+ Arrays.toString(trades) + "]";
 		}
 	}
 	
 	/**
-	 * @param args
+	 * 
 	 */
 	public class TradeHistoryOrder {
-		public int order_id ;
-		public TradeHistoryOrderDetails order_details ;
+		public int trans_id ;
+		public TradeHistoryOrderDetails trade_details ;
 		
+		/*
+		 * (non-Javadoc)
+		 * @see java.lang.Object#toString()
+		 */
 		@Override
 		public String toString() {
-			return "[order_id=" + order_id + ", order_details="+ order_details + "]";
+			return "[trans_id=" + trans_id + ", trade_details="+ trade_details + "]";
 		}
 	}
 	
 	/**
-	 * @param args
+	 * 
 	 */
 	public class TradeHistoryOrderDetails {
 		public String pair, type ;
@@ -523,6 +670,11 @@ public class BTCE {
 		public int order_id ;
 		public int is_your_order ;
 		public int timestamp ;
+		
+		/*
+		 * (non-Javadoc)
+		 * @see java.lang.Object#toString()
+		 */
 		@Override
 		public String toString() {
 			return "[pair=" + pair + ", type=" + type
@@ -535,30 +687,34 @@ public class BTCE {
 	private class TradeHistoryReturnDeserializer implements JsonDeserializer<TradeHistoryReturn> {
 		  public TradeHistoryReturn deserialize(JsonElement json, Type typeOfT, JsonDeserializationContext context) throws JsonParseException {
 			  TradeHistoryReturn thr = new TradeHistoryReturn() ;
-			  List<TradeHistoryOrder> orders = new ArrayList<TradeHistoryOrder>() ;
+			  List<TradeHistoryOrder> trades = new ArrayList<TradeHistoryOrder>() ;
 			  if( json.isJsonObject() ) {
 				  JsonObject o = json.getAsJsonObject() ;
 				  Iterator<Entry<String,JsonElement>> iter = o.entrySet().iterator() ;
 				  while(iter.hasNext()) {
 					  Entry<String,JsonElement> jsonOrder = iter.next();
-					  TradeHistoryOrder order = new TradeHistoryOrder() ;
-					  order.order_id = Integer.parseInt(jsonOrder.getKey()) ;
-					  order.order_details = context.deserialize(jsonOrder.getValue(),TradeHistoryOrderDetails.class) ;
-					  orders.add(order) ;
+					  TradeHistoryOrder trade = new TradeHistoryOrder() ;
+					  trade.trans_id = Integer.parseInt(jsonOrder.getKey()) ;
+					  trade.trade_details = context.deserialize(jsonOrder.getValue(),TradeHistoryOrderDetails.class) ;
+					  trades.add(trade) ;
 				  }
 			  }
-			  thr.orders = orders.toArray(new TradeHistoryOrder[0]) ;
+			  thr.trades = trades.toArray(new TradeHistoryOrder[0]) ;
 			  return thr ;
 		  }
 	}
 	
 	/**
-	 * @param args
+	 * returned by the {@link #getOrderList() getOrderList} method. Note that due to a java name collision the JSON field return is named info.
 	 */
-	public class OrderList extends Results {
+	public static class OrderList extends Results {
 		@SerializedName("return")
 		public OrderListReturn info ;
 		
+		/*
+		 * (non-Javadoc)
+		 * @see java.lang.Object#toString()
+		 */
 		@Override
 		public String toString() {
 			 return "OrderList [success=" + success + ", error=" + error + ", return=" + info + "]";			
@@ -566,11 +722,15 @@ public class BTCE {
 	}
 	
 	/**
-	 * @param args
+	 * 
 	 */
 	public class OrderListReturn {
 		public OrderListOrder[] orders ;
 
+		/*
+		 * (non-Javadoc)
+		 * @see java.lang.Object#toString()
+		 */
 		@Override
 		public String toString() {
 			return "[orders="+ Arrays.toString(orders) + "]";
@@ -578,12 +738,16 @@ public class BTCE {
 	}
 	
 	/**
-	 * @param args
+	 * 
 	 */
 	public class OrderListOrder {
 		public int order_id ;
 		public OrderListOrderDetails order_details ;
 		
+		/*
+		 * (non-Javadoc)
+		 * @see java.lang.Object#toString()
+		 */
 		@Override
 		public String toString() {
 			return "[order_id=" + order_id + ", order_details="	+ order_details + "]";
@@ -591,13 +755,20 @@ public class BTCE {
 	}
 	
 	/**
-	 * @param args
+	 * 
 	 */
 	public class OrderListOrderDetails {
-		public String pair, type ;
-		public double amount, rate ;
-		public int status, timestamp ;
+		public String pair ;
+		public String type ;
+		public double amount ;
+		public double rate ;
+		public int status ;
+		public int timestamp ;
 		
+		/*
+		 * (non-Javadoc)
+		 * @see java.lang.Object#toString()
+		 */
 		@Override
 		public String toString() {
 			return "[pair=" + pair + ", type=" + type
@@ -606,9 +777,6 @@ public class BTCE {
 		}
 	}
 	
-	/**
-	 * @param args
-	 */
 	private class OrderListReturnDeserializer implements JsonDeserializer<OrderListReturn> {
 		  public OrderListReturn deserialize(JsonElement json, Type typeOfT, JsonDeserializationContext context) throws JsonParseException {
 			  OrderListReturn olr = new OrderListReturn() ;
@@ -630,12 +798,16 @@ public class BTCE {
 	}
 	
 	/**
-	 * @param args
+	 * returned by the {@link #trade(String,String,double,double) trade} method. Note that due to a java name collision the JSON field return is named info.
 	 */
-	public class Trade extends Results {
+	public static class Trade extends Results {
 		@SerializedName("return")
 		public TradeReturn info ;
 
+		/*
+		 * (non-Javadoc)
+		 * @see java.lang.Object#toString()
+		 */
 		@Override
 		public String toString() {
 			return "Trade [success=" + success + ", error=" + error + ", return=" + info + "]";
@@ -643,7 +815,7 @@ public class BTCE {
 	}
 	
 	/**
-	 * @param args
+	 * 
 	 */
 	public class TradeReturn {
 		public double received ;
@@ -651,6 +823,10 @@ public class BTCE {
 		public int order_id ;
 		public Funds funds ;
 		
+		/*
+		 * (non-Javadoc)
+		 * @see java.lang.Object#toString()
+		 */
 		@Override
 		public String toString() {
 			return "[received=" + received + ", remains=" + remains	+ ", order_id=" + order_id + ", funds=" + funds + "]";
@@ -658,12 +834,17 @@ public class BTCE {
 	}
 	
 	/**
-	 * @param args
+	 * returned by the {@link #cancelOrder(int) cancelOrder} method. Note that due to a java name collision the JSON field return is named info.
 	 */
-	public class CancelOrder extends Results {
+	public static class CancelOrder extends Results {
+		
 		@SerializedName("return")
 		public CancelOrderReturn info ;
 
+		/*
+		 * (non-Javadoc)
+		 * @see com.abwaters.btce.BTCE.Results#toString()
+		 */
 		@Override
 		public String toString() {
 			return "CancelOrder [success=" + success + ", error=" + error + ", return=" + info + "]";
@@ -671,21 +852,71 @@ public class BTCE {
 	}
 	
 	/**
-	 * @param args
+	 * 
 	 */
 	public class CancelOrderReturn {
 		public int order_id ;
 		public Funds funds ;
 		
+		/*
+		 * (non-Javadoc)
+		 * @see java.lang.Object#toString()
+		 */
 		@Override
 		public String toString() {
 			return "[order_id=" + order_id + ", funds="
 					+ funds + "]";
 		}
 	}
+
+	/**
+	 * Currency pair helper class.
+	 */
+	public static final class Pairs {
+		public static final String BTC_USD = "btc_usd" ;
+		public static final String BTC_RUR = "btc_rur" ;
+		public static final String BTC_EUR = "btc_eur" ;
+		public static final String LTC_BTC = "ltc_btc" ;
+		public static final String LTC_USD = "ltc_usd" ;
+		public static final String LTC_RUR = "ltc_rur" ;
+		public static final String LTC_EUR = "ltc_eur" ;
+		public static final String NMC_BTC = "nmc_btc" ;
+		public static final String NMC_USD = "nmc_usd" ;
+		public static final String NVC_BTC = "nvc_btc" ;
+		public static final String NVC_USD = "nvc_usd" ;
+		public static final String TRC_BTC = "trc_btc" ;
+		public static final String PPC_BTC = "ppc_btc" ;
+		public static final String FTC_BTC = "ftc_btc" ;
+		public static final String USD_RUR = "usd_rur" ;
+		public static final String EUR_USD = "eur_usd" ;
+	}
+
+	/**
+	 * Trade type helper class.
+	 *
+	 */
+	public static final class TradeType {
+		public static final String BUY = "buy" ;
+		public static final String SELL = "sell" ;
+	}
+	
+	public static final class TransactionType {
+		public static final int DEPOSIT = 0 ;
+		public static final int WITHDRAW = 1 ;	// ?
+		public static final int ORDER_CANCEL = 4 ;
+		public static final int ORDER_SELL = 5 ;
+	}
+	
+	public static final class OrderStatus {
+		public static final int ACTIVE = 0 ;
+		//public static final int 
+	}
 	
 	/**
-	 * @param args
+	 * An exception class specifically for the BTCE API.  The goal here is to provide a specific exception class for this API while
+	 * not losing any of the details of the inner exceptions.
+	 * <p>  
+	 * This class is just a wrapper for the Exception class.
 	 */
 	public class BTCEException extends Exception {
 		
