@@ -249,7 +249,7 @@ public class BTCE {
 	 *  
 	 * @param request_limit call limit in milliseconds
 	 */
-	public void setCallLimit(long request_limit) {
+	public void setRequestLimit(long request_limit) {
 		BTCE.request_limit = request_limit ; 
 	}
 	
@@ -262,7 +262,7 @@ public class BTCE {
 	 * 
 	 * @param auth_request_limit call limit in milliseconds
 	 */
-	public void setAuthCallLimit(long auth_request_limit) {
+	public void setAuthRequestLimit(long auth_request_limit) {
 		BTCE.auth_request_limit = auth_request_limit ; 
 	}
 	

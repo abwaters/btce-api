@@ -1,5 +1,9 @@
 package com.abwaters.btce.test;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.util.Properties;
+
 import junit.framework.Assert;
 
 import org.junit.Before;
@@ -18,26 +22,39 @@ public class BTCE_Test {
 
 	private BTCE btce ;
 	
+	private static Properties load(File pfile) throws Exception {
+		FileInputStream pfs = new FileInputStream(pfile.getAbsoluteFile()) ;
+		Properties properties = new Properties() ;
+		properties.load(pfs) ;
+		return properties ;
+	}
+	
 	@Before
 	public void setUp() throws Exception {
 		// Note: Keys below do not have trade or withdraw permissions...only info
-		String key = "O07AKCXU-2EFJW1JL-UW03I38C-74JNF7F0-JEXJ83SJ" ;
-		String secret = "8c161f8031822a1f9e18cff70a7169ce53ac8ee295943b5a2e0ca2632300f80c" ;
+		String userdir = System.getProperty("user.dir") ;
+		Properties p = load(new File(userdir,"config.properties")) ;
+		String key = p.getProperty("btce.key") ;
+		String secret = p.getProperty("btce.secret") ;
+		int request_limit = Integer.parseInt(p.getProperty("btce.request_limit")) ;
+		int auth_request_limit = Integer.parseInt(p.getProperty("btce.auth_request_limit")) ;
 		btce = new BTCE() ;
 		btce.setAuthKeys(key, secret) ;
+		btce.setAuthRequestLimit(auth_request_limit) ;
+		btce.setRequestLimit(request_limit) ;
 	}
 
 	@Test
 	public void testTrade() throws BTCEException {
 		//Trade trade = btce.trade(BTCE.Pairs.BTC_USD, BTCE.TradeType.SELL, 97.00, .01) ;
-		Trade trade = btce.trade(BTCE.Pairs.BTC_USD, BTCE.TradeType.BUY, 96.00, .01) ;
+		Trade trade = btce.trade(BTCE.Pairs.BTC_USD, BTCE.TradeType.BUY, 96.50, .01) ;
 		Assert.assertTrue(trade!=null) ;
 		System.out.println(trade) ;
 	}
 	
 	@Test
 	public void testCancelOrder() throws BTCEException {
-		int order_id = 31763837 ;
+		int order_id = 31770453 ;
 		CancelOrder cancel_order = btce.cancelOrder(order_id) ;
 		Assert.assertTrue(cancel_order!=null) ;
 		System.out.println(cancel_order) ;
