@@ -15,9 +15,11 @@ import com.abwaters.btce.BTCE.BTCEException;
 import com.abwaters.btce.BTCE.CancelOrder;
 import com.abwaters.btce.BTCE.Info;
 import com.abwaters.btce.BTCE.OrderList;
+import com.abwaters.btce.BTCE.OrderListOrder;
 import com.abwaters.btce.BTCE.Ticker;
 import com.abwaters.btce.BTCE.Trade;
 import com.abwaters.btce.BTCE.TradeHistory;
+import com.abwaters.btce.BTCE.TradeHistoryOrder;
 import com.abwaters.btce.BTCE.TradesDetail;
 import com.abwaters.btce.BTCE.TransactionHistory;
 
@@ -47,10 +49,31 @@ public class BTCE_Test {
 		btce.setRequestLimit(request_limit) ;
 	}
 
+	private static double round(double value, int places) {
+	    if (places < 0) throw new IllegalArgumentException();
+
+	    long factor = (long) Math.pow(10, places);
+	    value = value * factor;
+	    long tmp = Math.round(value);
+	    return (double) tmp / factor;
+	}
+	
 	@Test
 	public void testTrade() throws BTCEException {
-		//Trade trade = btce.trade(BTCE.Pairs.BTC_USD, BTCE.TradeType.SELL, 97.00, .01) ;
-		Trade trade = btce.trade(BTCE.Pairs.BTC_USD, BTCE.TradeType.BUY, 96.50, .01) ;
+		// get hit at 1.014
+		String trade_type = BTCE.TradeType.SELL ;
+		double price = 98.26 ;
+		String pair = BTCE.Pairs.BTC_USD ;
+		Info info = btce.getInfo() ;
+		double amount = 0, funds = 0 ;
+		if( trade_type.compareToIgnoreCase(BTCE.TradeType.BUY)==0 ) {
+			funds = info.info.funds.usd ;
+			amount = round(funds / (price*1.002),4) ;
+		}else if( trade_type.compareToIgnoreCase(BTCE.TradeType.SELL)==0 ) {
+			amount = info.info.funds.btc ;
+		}
+		System.out.println(trade_type.toUpperCase()+" @ Price: "+price+" Amount: "+amount) ;
+		Trade trade = btce.trade(pair,trade_type,price,amount) ;
 		Assert.assertTrue(trade!=null) ;
 		System.out.println(trade) ;
 	}
@@ -62,7 +85,7 @@ public class BTCE_Test {
 		Assert.assertTrue(cancel_order!=null) ;
 		System.out.println(cancel_order) ;
 	}
-
+	
 	@Test
 	public void testInfo() throws BTCEException {
 		Info info = btce.getInfo() ;
@@ -81,6 +104,9 @@ public class BTCE_Test {
 	public void testTradeHistory() throws BTCEException {
 		TradeHistory trade_history = btce.getTradeHistory() ;
 		Assert.assertTrue(trade_history!=null) ;
+		for(TradeHistoryOrder trade:trade_history.info.trades) {
+			System.out.println(trade) ;
+		}
 		System.out.println(trade_history.toString()) ;
 	}
 	
@@ -88,7 +114,9 @@ public class BTCE_Test {
 	public void testOrderList() throws BTCEException {
 		OrderList order_list = btce.getOrderList() ;
 		Assert.assertTrue(order_list!=null) ;
-		System.out.println(order_list.toString()) ;
+		for(OrderListOrder order:order_list.info.orders) {
+			System.out.println(order) ;
+		}
 	}
 	
 	@Test
@@ -100,6 +128,54 @@ public class BTCE_Test {
 	@Test
 	public void testTrades() throws BTCEException {
 		TradesDetail[] trades = btce.getTrades(BTCE.Pairs.BTC_USD) ;
+		Assert.assertTrue(trades!=null) ;
 		System.out.println(Arrays.toString(trades)) ;
+	}
+	
+	private void tradesSummary(TradesDetail[] trades,String type) {
+		double min=Double.MAX_VALUE, max=0, avg=0, total=0, wall=0 ;
+		double minPrice=Double.MAX_VALUE, maxPrice=0, avgPrice=0, totalPrice = 0, wallPrice = 0 ;
+		int cnt = 0 ;
+		for(TradesDetail trade:trades) {
+			if( trade.trade_type.equalsIgnoreCase(type)) {
+				cnt++ ;
+				total += trade.amount ;
+				totalPrice += trade.price ;
+				if( minPrice > trade.price ) {
+					min = trade.amount ;
+					minPrice = trade.price ;
+				}
+				if( maxPrice < trade.price ) {
+					max = trade.amount ;
+					maxPrice = trade.price ;
+				}
+				if( wall < trade.amount ) {
+					wall = trade.amount ;
+					wallPrice = trade.price ;
+				}
+			}
+		}
+		avg = total/cnt ;
+		avgPrice = totalPrice/cnt ;
+		String tran_type = type.equalsIgnoreCase("ask")?"buy":"sell" ;
+		System.out.println("=========== "+type+" ("+tran_type+") summary ==================") ;
+		System.out.println("Min="+min+" Price="+minPrice) ;
+		System.out.println("Max="+max+" Price="+maxPrice) ;
+		System.out.println("Avg="+avg+" Price="+avgPrice) ;
+		System.out.println("Wal="+wall+" Price="+wallPrice) ;
+		System.out.println("Ttl="+total+" Price="+totalPrice) ;
+		System.out.println() ;
+	}
+	
+	@Test
+	public void testMarketDepth() throws BTCEException {
+		TradesDetail[] trades = btce.getTrades(BTCE.Pairs.BTC_USD) ;
+		Assert.assertTrue(trades!=null) ;
+		tradesSummary(trades,"ask") ;
+		tradesSummary(trades,"bid") ;
+		System.out.println("===================================") ;
+		for(TradesDetail trade:trades) {
+			System.out.println(trade) ;
+		}
 	}
 }
