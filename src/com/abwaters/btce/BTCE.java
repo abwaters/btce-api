@@ -302,7 +302,7 @@ public class BTCE {
 	 * limit is typically set higher (10-15 seconds) to avoid abuse. 
 	 * 
 	 * @param pair
-	 * @return
+	 * @return a Ticker object for the specified pair.
 	 * @throws BTCEException
 	 */
 	public Ticker getTicker(String pair) throws BTCEException {
@@ -317,7 +317,7 @@ public class BTCE {
 	 * limit is typically set higher (10-15 seconds) to avoid abuse. 
 	 * 
 	 * @param pair
-	 * @return
+	 * @return an array of TradeDetail objects
 	 * @throws BTCEException
 	 */
 	public TradesDetail[] getTrades(String pair) throws BTCEException {
@@ -930,6 +930,9 @@ public class BTCE {
 		public static final String SELL = "sell" ;
 	}
 	
+	/**
+	 * 
+	 */
 	public static class TransactionType {
 		public static final int DEPOSIT = 0 ;
 		public static final int WITHDRAW = 1 ;	// ?
@@ -937,6 +940,9 @@ public class BTCE {
 		public static final int ORDER_SELL = 5 ;
 	}
 	
+	/**
+	 * 
+	 */
 	public static class OrderStatus {
 		public static final int ACTIVE = 0 ;
 		public static final int FILLED = 1 ;
@@ -944,6 +950,9 @@ public class BTCE {
 		public static final int PARTIALLY_FILLED = 3 ;
 	}
 
+	/**
+	 *
+	 */
 	private class TickerWrapper {
 		private Ticker ticker ;
 	}
