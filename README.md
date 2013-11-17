@@ -11,9 +11,9 @@ Coming soon.
 
 Donations to any of the following addresses are appreciated:
 
-BTC:  1Mzz2keyuGiSKzSyYXqYQG7Vc5mh2Bsr8i
+BTC:  1CFP8cSbEkiKEjnadwdrtcKaARW3i8rsev
 
-LTC:  LUJ9H3jq7YqUwdboSZ59nrrpVN1mZV8Q3A
+LTC:  LWD5zMujy3WoFHTdUpbNnzKCPAyD4EhgGF
 
 BTC-E Code: abwaters
 

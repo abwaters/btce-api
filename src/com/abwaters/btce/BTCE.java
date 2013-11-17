@@ -63,6 +63,7 @@ public class BTCE {
 	
 	// https://btc-e.com/api/2/btc_usd/ticker
 	// https://btc-e.com/api/2/btc_usd/trades
+	// https://btc-e.com/api/2/btc_usd/depth  TODO: implement depth call...
 
 	private static final String USER_AGENT = "Mozilla/5.0 (compatible; BTCE-API/1.0; MSIE 6.0 compatible; +https://github.com/abwaters/btce-api)" ;
 	private static final String TICKER_TRADES_URL = "https://btc-e.com/api/2/" ;
