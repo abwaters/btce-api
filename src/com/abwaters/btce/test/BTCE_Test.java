@@ -59,6 +59,15 @@ public class BTCE_Test {
 	}
 	
 	@Test
+	public void testActiveOrders() throws BTCEException {
+		OrderList order_list = btce.getActiveOrders() ;
+		if( order_list != null && order_list.info != null )
+		for(OrderListOrder order:order_list.info.orders) {
+			System.out.println(order) ;
+		} else System.out.println("no orders") ;
+	}
+	
+	@Test
 	public void testTrade() throws BTCEException {
 		// get hit at 1.014
 		String trade_type = BTCE.TradeType.SELL ;

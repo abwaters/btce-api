@@ -173,15 +173,18 @@ public class BTCE {
 	}
 	
 	/**
+	 * @deprecated
 	 * Returns the order list for the account.
 	 * 
 	 * @return the order list.
 	 */
+	@Deprecated
 	public OrderList getOrderList() throws BTCEException {
 		return getOrderList(0,0,0,0,null,0,0,null,0) ;
 	}
 	
 	/**
+	 * @deprecated
 	 * Returns the order list for the account.
 	 * <p>
 	 * All arguments can be either a 0, a null or an empty string "" which will result in the argument being omitted from the API call.
@@ -196,6 +199,7 @@ public class BTCE {
 	 * @param pair the pair to include in the order list.
 	 * @param active include only active orders in the order list. 
 	 */
+	@Deprecated
 	public OrderList getOrderList(int from,int count,int from_id,int end_id,String order,long since,long end,String pair,int active) throws BTCEException {
 		Map<String,String> args = new HashMap<String,String>() ;		
 		if( from > 0 ) args.put("from", Integer.toString(from)) ;
@@ -208,6 +212,23 @@ public class BTCE {
 		if( pair != null && pair.length() > 0 ) args.put("pair", pair) ;
 		if( active > 0 ) args.put("active", Long.toString(active)) ;
 		return gson.fromJson(authrequest("OrderList",args),OrderList.class) ;
+	}
+	
+	/**
+	 * Returns the order list for the account for all currency pairs.
+	 * 
+	 * @return OrderList
+	 * 
+	 * @throws BTCEException
+	 */
+	public OrderList getActiveOrders() throws BTCEException {
+		return getActiveOrders(null) ;
+	}
+	
+	public OrderList getActiveOrders(String pair) throws BTCEException {
+		Map<String,String> args = new HashMap<String,String>() ;		
+		if( pair != null && pair.length() > 0 ) args.put("pair", pair) ;
+		return gson.fromJson(authrequest("ActiveOrders",args),OrderList.class) ;
 	}
 	
 	/**
