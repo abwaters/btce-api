@@ -1,9 +1,7 @@
 btce-api
 ========
 
-A small, fast Java library for the BTC-E bitcoin exchange.  The goal of this project is easy integration and easy use.
-
-Small fast (and complete) Java API for the Cryptsy crypto-currency exchange with minimal dependencies.  The only external library needed to use this API is the [Google Gson Library](https://code.google.com/p/google-gson/).
+A small, fast Java library for the BTC-E bitcoin exchange with minimal dependencies.  The goal of this project is easy integration and easy use.  The only external library needed to use this API is the [Google Gson Library](https://code.google.com/p/google-gson/).
 
 Note: While the API is complete and functional in its current state, I am refining the naming conventions for the API and adding documentation.  This may require small but critical changes to your code if you upgrade to future versions.
 
